@@ -1,21 +1,31 @@
-import pyarrow as pa
+import subprocess
+import sys
 
-from engine.runner import PipelineRunner
 
-schema = pa.schema(
-    [
-        pa.field("col_0", pa.string()),
-        pa.field("col_1", pa.string()),
-        pa.field("col_2", pa.string()),
-    ]
-)
+def run_step(name: str, cmd: list[str]) -> None:
+    print(f"\nStarting: {name}")
+    result = subprocess.run(cmd)
 
-runner = PipelineRunner(
-    csv_path="data/raw/data.csv",
-    parquet_output_dir="data/processed/parquet",
-    parquet_schema=schema,
-    checkpoint_path="checkpoint/ingestion.chk",
-    batch_rows=200_000,
-)
+    if result.returncode != 0:
+        print(f"Failed: {name}")
+        sys.exit(result.returncode)
 
-runner.run()
+    print(f"Completed: {name}")
+
+
+def main():
+    run_step(
+        "CSV Splitting",
+        [sys.executable, "split.py"],
+    )
+
+    run_step(
+        "Normalization",
+        [sys.executable, "clean.py"],
+    )
+
+    print("\nPipeline finished successfully")
+
+
+if __name__ == "__main__":
+    main()

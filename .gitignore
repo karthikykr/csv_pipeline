@@ -1,9 +1,7 @@
-# Python virtual environments
 venv/
 .venv/
 env/
 ENV/
 source/
 splitted/
-output.csv
-parsed_case_names.csv
+clean/

@@ -1,3 +1,6 @@
+import os
+import re
+
 import polars as pl
 
 
@@ -87,35 +90,88 @@ class DataCleaningNormalizer:
             )
         )
 
-    def run(self) -> None:
-        """
-        Executes the normalization pipeline:
-        - Lazily reads CSV
-        - Normalizes plaintiff and defendant columns
-        - Writes output CSV without loading full data into memory
-        """
 
-        df = pl.scan_csv(self.input_csv, ignore_errors=True)
+V_REGEX = re.compile(
+    r"\s+v\.?\s+|\s+vs\.?\s+|\s+versus\s+",
+    re.IGNORECASE,
+)
 
-        df = df.with_columns(
-            [
-                self.normalize_party_expression(pl.col("plaintiff")).alias(
-                    "plaintiff_norm"
-                ),
-                self.normalize_party_expression(pl.col("defendant")).alias(
-                    "defendant_norm"
-                ),
-            ]
+ET_AL_CLEANER = re.compile(r",?\s+ET\s+AL\.?$", re.IGNORECASE)
+
+
+def clean_party(name: str | None) -> str | None:
+    if not isinstance(name, str):
+        return None
+    return ET_AL_CLEANER.sub("", name.strip()).strip()
+
+
+def parse_case_name(case_name: str | None) -> dict:
+    if not isinstance(case_name, str):
+        return {"plaintiff": None, "defendant": None}
+
+    parts = V_REGEX.split(case_name, maxsplit=1)
+    if len(parts) != 2:
+        return {"plaintiff": None, "defendant": None}
+
+    return {
+        "plaintiff": clean_party(parts[0]),
+        "defendant": clean_party(parts[1]),
+    }
+
+
+def main():
+    INPUT_DIR = "splitted"
+    OUTPUT_DIR = "clean"
+
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+    csv_files = sorted(f for f in os.listdir(INPUT_DIR) if f.lower().endswith(".csv"))
+
+    for filename in csv_files:
+        input_path = os.path.join(INPUT_DIR, filename)
+        output_path = os.path.join(OUTPUT_DIR, f"clean_{filename}")
+
+        df = pl.scan_csv(input_path, ignore_errors=True)
+
+        df = (
+            df.with_columns(
+                pl.col("case_name")
+                .map_elements(
+                    parse_case_name,
+                    return_dtype=pl.Struct(
+                        [
+                            pl.Field("plaintiff", pl.Utf8),
+                            pl.Field("defendant", pl.Utf8),
+                        ]
+                    ),
+                )
+                .alias("parsed")
+            )
+            .with_columns(
+                pl.col("parsed").struct.field("plaintiff").alias("plaintiff"),
+                pl.col("parsed").struct.field("defendant").alias("defendant"),
+                DataCleaningNormalizer.normalize_party_expression(
+                    pl.col("parsed").struct.field("plaintiff")
+                ).alias("plaintiff_norm"),
+                DataCleaningNormalizer.normalize_party_expression(
+                    pl.col("parsed").struct.field("defendant")
+                ).alias("defendant_norm"),
+            )
+            .select(
+                [
+                    "case_name",
+                    "plaintiff",
+                    "defendant",
+                    "plaintiff_norm",
+                    "defendant_norm",
+                ]
+            )
         )
 
-        df.sink_csv(self.output_csv)
+        df.sink_csv(output_path)
 
-        print(f"Normalized data written to {self.output_csv}")
+        print(f"Normalized data written to {output_path}")
 
 
 if __name__ == "__main__":
-    INPUT_CSV = "parsed_case_names.csv"
-    OUTPUT_CSV = "output.csv"
-
-    normalizer = DataCleaningNormalizer(INPUT_CSV, OUTPUT_CSV)
-    normalizer.run()
+    main()
