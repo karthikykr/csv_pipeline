@@ -1,0 +1,10 @@
+.venv
+venv
+env
+ENV
+__pycache__/
+*.pyc
+.git
+.gitignore
+splitted/
+clean/
