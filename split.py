@@ -5,13 +5,13 @@ import re
 import polars as pl
 
 BASE_PATH = "/pipeline"
-INPUT_FILE = f"{BASE_PATH}/source/data.csv"
+INPUT_FILE = f"{BASE_PATH}/source"
 OUTPUT_DIR = f"{BASE_PATH}/splitted"
 
 STATE_DIR = "/tmp/csv_pipeline_state"
 STATE_FILE = f"{STATE_DIR}/split_checkpoint.json"
 
-ROWS_PER_FILE = 800_000
+ROWS_PER_FILE = 400_000
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 os.makedirs(STATE_DIR, exist_ok=True)
